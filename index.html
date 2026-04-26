@@ -3,143 +3,191 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Monaco Quest - Final Version</title>
+    <title>Monaco Quest - Aventure</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         :root { --monaco-red: #e31d23; --dark: #222; }
-        body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; font-family: sans-serif; }
-        #map { height: 65vh; width: 100%; background: #ddd; }
-        .ui-container { height: 35vh; width: 100%; padding: 10px; text-align: center; background: white; border-top: 5px solid var(--monaco-red); display: flex; flex-direction: row; justify-content: space-around; align-items: center; box-sizing: border-box; }
-        .d-pad { display: grid; grid-template-columns: repeat(3, 50px); grid-template-rows: repeat(2, 50px); gap: 8px; }
-        .d-btn { width: 50px; height: 50px; background: var(--dark); color: white; border: none; border-radius: 10px; font-size: 22px; display: flex; align-items: center; justify-content: center; touch-action: manipulation; }
-        .d-btn:active { background: var(--monaco-red); }
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        
+        #map { height: 100vh; width: 100%; background: #ddd; z-index: 1; }
+
+        /* Manette Tactile flottante */
+        .ui-overlay {
+            position: absolute; bottom: 20px; left: 20px; z-index: 10;
+            background: rgba(255, 255, 255, 0.9); padding: 10px; border-radius: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .d-pad { display: grid; grid-template-columns: repeat(3, 45px); grid-template-rows: repeat(2, 45px); gap: 5px; }
+        .d-btn { 
+            width: 45px; height: 45px; background: var(--dark); color: white; border: none; 
+            border-radius: 10px; font-size: 18px; display: flex; align-items: center; justify-content: center; 
+        }
         .up { grid-column: 2; } .left { grid-column: 1; grid-row: 2; } .down { grid-column: 2; grid-row: 2; } .right { grid-column: 3; grid-row: 2; }
-        .game-controls { flex: 1; padding: 5px; display: flex; flex-direction: column; align-items: center; }
-        #status-text { font-size: 0.95rem; margin-bottom: 10px; font-weight: bold; color: #333; height: 45px; display: flex; align-items: center; text-align: center;}
-        .btn-camera { display: none; background: var(--monaco-red); color: white; padding: 15px 25px; border: none; border-radius: 30px; font-size: 16px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.2); cursor: pointer; }
-        #loader { display: none; color: var(--monaco-red); font-weight: bold; animation: blink 1s infinite; }
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        /* Fenêtre Plein Écran (Modal) */
+        #photo-modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: white; z-index: 100; flex-direction: column; align-items: center;
+            justify-content: center; text-align: center; padding: 20px; box-sizing: border-box;
+        }
+        .close-modal {
+            position: absolute; top: 20px; right: 20px; font-size: 40px;
+            color: var(--dark); cursor: pointer; font-weight: bold; line-height: 1;
+        }
+        .modal-content { max-width: 400px; }
+        .modal-content h2 { color: var(--monaco-red); margin-bottom: 15px; }
+        .modal-content p { font-size: 1.1rem; line-height: 1.4; margin-bottom: 30px; color: #444; }
+
+        .btn-capture {
+            background: var(--monaco-red); color: white; padding: 18px 35px;
+            border: none; border-radius: 50px; font-size: 18px; font-weight: bold;
+            box-shadow: 0 5px 15px rgba(227, 29, 35, 0.4); cursor: pointer;
+        }
+
+        #loader-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.9); z-index: 200; flex-direction: column;
+            align-items: center; justify-content: center; font-weight: bold; color: var(--monaco-red);
+        }
     </style>
 </head>
 <body>
 
     <div id="map"></div>
 
-    <div class="ui-container">
+    <div class="ui-overlay">
         <div class="d-pad">
             <button class="d-btn up" onclick="move('up')">▲</button>
             <button class="d-btn left" onclick="move('left')">◀</button>
             <button class="d-btn down" onclick="move('down')">▼</button>
             <button class="d-btn right" onclick="move('right')">▶</button>
         </div>
+    </div>
 
-        <div class="game-controls">
-            <div id="status-text">Rejoignez un point sur la carte...</div>
-            <div id="loader">ENVOI EN COURS...</div>
+    <div id="photo-modal">
+        <span class="close-modal" onclick="closeModal()">&times;</span>
+        <div class="modal-content">
+            <h2 id="modal-title">Défi trouvé !</h2>
+            <p id="modal-text">Texte du défi ici...</p>
+            
             <input type="file" accept="image/*" capture="camera" id="camera-input" style="display:none;">
-            <button class="btn-camera" id="camera-btn" onclick="document.getElementById('camera-input').click()">📸 PHOTO</button>
-            <div id="success-msg" style="color: green; display: none; font-weight: bold; font-size: 1.1rem;">✅ ENVOYÉ !</div>
+            <button class="btn-capture" onclick="document.getElementById('camera-input').click()">📸 PRENDRE LA PHOTO</button>
         </div>
     </div>
 
+    <div id="loader-overlay">
+        <div style="font-size: 40px; margin-bottom: 10px;">⏳</div>
+        ENVOI VERS LE DRIVE...
+    </div>
+
     <script>
-        // --- CONFIGURATION ---
-        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzoZMixrepJ5sJKEg9gFguaZzY20pCnmgCkR5fwgQhkl-MoNACYcXNM2j9YcQyZlu55Tw/exec";
+        const SCRIPT_URL = "TON_URL_SCRIPT_ICI"; // <--- REMETS TON URL ICI
+
+        let map, playerMarker, playerPos;
+        let activeDefi = null;
+
+        const defis = [
+            { 
+                id: 1, lat: 43.7311, lng: 7.4209, nom: "Palais Princier 👑", 
+                texte: "Direction le Palais princier de Monaco 👑\nFais une photo face à la résidence du Prince pour compléter cette étape du jeu de piste."
+            },
+            { 
+                id: 2, lat: 43.7306, lng: 7.4255, nom: "Musée Océanographique 🌊", 
+                texte: "Rends-toi devant le Musée océanographique de Monaco et immortalise ta visite !\nPrends une photo avec la mer en arrière-plan pour valider ton passage."
+            },
+            { 
+                id: 3, lat: 43.7302, lng: 7.4225, nom: "Cathédrale de Monaco ⛪", 
+                texte: "Cap sur la Cathédrale de Monaco ! Place-toi devant ce lieu emblématique et prends une photo souvenir pour poursuivre l’aventure."
+            }
+        ];
 
         window.onload = function() {
-            const map = L.map('map', { zoomControl: false }).setView([43.7311, 7.4209], 18);
+            map = L.map('map', { zoomControl: false }).setView([43.7311, 7.4209], 18);
             L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
 
-            let playerPos = L.latLng(43.7315, 7.4200);
-            const playerMarker = L.circleMarker(playerPos, {
+            playerPos = L.latLng(43.7315, 7.4200);
+            playerMarker = L.circleMarker(playerPos, {
                 radius: 10, fillColor: "#007bff", color: "#fff", weight: 3, fillOpacity: 1
             }).addTo(map);
 
-            const defis = [
-                { id: 1, lat: 43.7311, lng: 7.4209, nom: "Palais Princier" },
-                { id: 2, lat: 43.7306, lng: 7.4255, nom: "Musée Océano" },
-                { id: 3, lat: 43.7303, lng: 7.4226, nom: "Mairie de Monaco" }
-            ];
-
-            const markers = [];
             defis.forEach(d => {
                 L.circle([d.lat, d.lng], { color: 'red', fillOpacity: 0.1, radius: 35 }).addTo(map);
-                const m = L.marker([d.lat, d.lng]).addTo(map);
-                markers.push({ ...d, marker: m, completed: false });
+                d.marker = L.marker([d.lat, d.lng]).addTo(map);
+                d.completed = false;
             });
+        };
 
-            const step = 0.00012; 
-            window.move = function(direction) {
-                let lat = playerPos.lat; let lng = playerPos.lng;
-                if(direction === 'up') lat += step; if(direction === 'down') lat -= step;
-                if(direction === 'left') lng -= step; if(direction === 'right') lng += step;
-                playerPos = L.latLng(lat, lng);
-                playerMarker.setLatLng(playerPos);
-                map.panTo(playerPos);
-                checkProximite();
-            };
+        window.move = function(direction) {
+            const step = 0.00012;
+            let lat = playerPos.lat;
+            let lng = playerPos.lng;
+            if(direction === 'up') lat += step;
+            if(direction === 'down') lat -= step;
+            if(direction === 'left') lng -= step;
+            if(direction === 'right') lng += step;
 
-            let activeDefi = null;
-            function checkProximite() {
-                let isNear = false;
-                markers.forEach(d => {
-                    let dist = playerPos.distanceTo([d.lat, d.lng]);
-                    if(dist < 35 && !d.completed) {
-                        isNear = true; activeDefi = d;
-                        document.getElementById('status-text').innerHTML = "📍 Arrivé au <br>" + d.nom;
-                        document.getElementById('camera-btn').style.display = "block";
-                    }
-                });
-                if(!isNear) {
-                    document.getElementById('status-text').innerText = "Cherchez les défis...";
-                    document.getElementById('camera-btn').style.display = "none";
+            playerPos = L.latLng(lat, lng);
+            playerMarker.setLatLng(playerPos);
+            map.panTo(playerPos);
+            checkProximite();
+        };
+
+        function checkProximite() {
+            defis.forEach(d => {
+                let dist = playerPos.distanceTo([d.lat, d.lng]);
+                if(dist < 35 && !d.completed && activeDefi === null) {
+                    openModal(d);
                 }
-            }
+            });
+        }
 
-            // --- PARTIE FETCH CORRIGÉE ---
-            document.getElementById('camera-input').onchange = function(event) {
-                const file = event.target.files[0];
-                if (!file) return;
+        function openModal(defi) {
+            activeDefi = defi;
+            document.getElementById('modal-title').innerText = defi.nom;
+            document.getElementById('modal-text').innerText = defi.texte;
+            document.getElementById('photo-modal').style.display = 'flex';
+        }
 
-                document.getElementById('camera-btn').style.display = "none";
-                document.getElementById('status-text').style.display = "none";
-                document.getElementById('loader').style.display = "block";
+        function closeModal() {
+            document.getElementById('photo-modal').style.display = 'none';
+            activeDefi = null; // Permet de revenir sur le point si on a fermé sans prendre de photo
+        }
 
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const bytes = e.target.result.split(',')[1];
-                    
-                    fetch(SCRIPT_URL, {
-                        method: "POST",
-                        mode: "no-cors", // Crucial pour éviter l'erreur Failed to Fetch
-                        headers: { "Content-Type": "text/plain" },
-                        body: bytes
-                    })
-                    .then(() => {
-                        // En mode no-cors, on simule le succès car l'envoi est parti
-                        activeDefi.completed = true;
-                        activeDefi.marker.setIcon(new L.Icon({
-                            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
-                            iconSize: [25, 41], iconAnchor: [12, 41]
-                        }));
-                        document.getElementById('loader').style.display = "none";
-                        document.getElementById('success-msg').style.display = "block";
-                        document.getElementById('status-text').style.display = "block";
-                        document.getElementById('status-text').innerText = "Vérifiez votre Drive !";
-                        
-                        setTimeout(() => {
-                            document.getElementById('success-msg').style.display = "none";
-                        }, 3000);
-                    })
-                    .catch(err => {
-                        alert("Erreur réseau: " + err);
-                        document.getElementById('loader').style.display = "none";
-                        document.getElementById('camera-btn').style.display = "block";
-                    });
-                };
-                reader.readAsDataURL(file);
+        document.getElementById('camera-input').onchange = function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            document.getElementById('photo-modal').style.display = 'none';
+            document.getElementById('loader-overlay').style.display = 'flex';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const bytes = e.target.result.split(',')[1];
+                
+                fetch(SCRIPT_URL, {
+                    method: "POST",
+                    mode: "no-cors",
+                    headers: { "Content-Type": "text/plain" },
+                    body: bytes
+                })
+                .then(() => {
+                    activeDefi.completed = true;
+                    activeDefi.marker.setIcon(new L.Icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
+                        iconSize: [25, 41], iconAnchor: [12, 41]
+                    }));
+                    document.getElementById('loader-overlay').style.display = 'none';
+                    alert("Génial ! Ta photo est enregistrée.");
+                    activeDefi = null;
+                })
+                .catch(err => {
+                    alert("Erreur d'envoi. Réessaie.");
+                    document.getElementById('loader-overlay').style.display = 'none';
+                    document.getElementById('photo-modal').style.display = 'flex';
+                });
             };
+            reader.readAsDataURL(file);
         };
     </script>
 </body>
