@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Monaco Quest - Final Version</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root { --monaco-red: #e31d23; --dark: #222; }
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; font-family: sans-serif; }
+        #map { height: 65vh; width: 100%; background: #ddd; }
+        .ui-container { height: 35vh; width: 100%; padding: 10px; text-align: center; background: white; border-top: 5px solid var(--monaco-red); display: flex; flex-direction: row; justify-content: space-around; align-items: center; box-sizing: border-box; }
+        .d-pad { display: grid; grid-template-columns: repeat(3, 50px); grid-template-rows: repeat(2, 50px); gap: 8px; }
+        .d-btn { width: 50px; height: 50px; background: var(--dark); color: white; border: none; border-radius: 10px; font-size: 22px; display: flex; align-items: center; justify-content: center; touch-action: manipulation; }
+        .d-btn:active { background: var(--monaco-red); }
+        .up { grid-column: 2; } .left { grid-column: 1; grid-row: 2; } .down { grid-column: 2; grid-row: 2; } .right { grid-column: 3; grid-row: 2; }
+        .game-controls { flex: 1; padding: 5px; display: flex; flex-direction: column; align-items: center; }
+        #status-text { font-size: 0.95rem; margin-bottom: 10px; font-weight: bold; color: #333; height: 45px; display: flex; align-items: center; text-align: center;}
+        .btn-camera { display: none; background: var(--monaco-red); color: white; padding: 15px 25px; border: none; border-radius: 30px; font-size: 16px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.2); cursor: pointer; }
+        #loader { display: none; color: var(--monaco-red); font-weight: bold; animation: blink 1s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <div class="ui-container">
+        <div class="d-pad">
+            <button class="d-btn up" onclick="move('up')">▲</button>
+            <button class="d-btn left" onclick="move('left')">◀</button>
+            <button class="d-btn down" onclick="move('down')">▼</button>
+            <button class="d-btn right" onclick="move('right')">▶</button>
+        </div>
+
+        <div class="game-controls">
+            <div id="status-text">Rejoignez un point sur la carte...</div>
+            <div id="loader">ENVOI EN COURS...</div>
+            <input type="file" accept="image/*" capture="camera" id="camera-input" style="display:none;">
+            <button class="btn-camera" id="camera-btn" onclick="document.getElementById('camera-input').click()">📸 PHOTO</button>
+            <div id="success-msg" style="color: green; display: none; font-weight: bold; font-size: 1.1rem;">✅ ENVOYÉ !</div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzoZMixrepJ5sJKEg9gFguaZzY20pCnmgCkR5fwgQhkl-MoNACYcXNM2j9YcQyZlu55Tw/exec";
+
+        window.onload = function() {
+            const map = L.map('map', { zoomControl: false }).setView([43.7311, 7.4209], 18);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
+
+            let playerPos = L.latLng(43.7315, 7.4200);
+            const playerMarker = L.circleMarker(playerPos, {
+                radius: 10, fillColor: "#007bff", color: "#fff", weight: 3, fillOpacity: 1
+            }).addTo(map);
+
+            const defis = [
+                { id: 1, lat: 43.7311, lng: 7.4209, nom: "Palais Princier" },
+                { id: 2, lat: 43.7306, lng: 7.4255, nom: "Musée Océano" },
+                { id: 3, lat: 43.7303, lng: 7.4226, nom: "Mairie de Monaco" }
+            ];
+
+            const markers = [];
+            defis.forEach(d => {
+                L.circle([d.lat, d.lng], { color: 'red', fillOpacity: 0.1, radius: 35 }).addTo(map);
+                const m = L.marker([d.lat, d.lng]).addTo(map);
+                markers.push({ ...d, marker: m, completed: false });
+            });
+
+            const step = 0.00012; 
+            window.move = function(direction) {
+                let lat = playerPos.lat; let lng = playerPos.lng;
+                if(direction === 'up') lat += step; if(direction === 'down') lat -= step;
+                if(direction === 'left') lng -= step; if(direction === 'right') lng += step;
+                playerPos = L.latLng(lat, lng);
+                playerMarker.setLatLng(playerPos);
+                map.panTo(playerPos);
+                checkProximite();
+            };
+
+            let activeDefi = null;
+            function checkProximite() {
+                let isNear = false;
+                markers.forEach(d => {
+                    let dist = playerPos.distanceTo([d.lat, d.lng]);
+                    if(dist < 35 && !d.completed) {
+                        isNear = true; activeDefi = d;
+                        document.getElementById('status-text').innerHTML = "📍 Arrivé au <br>" + d.nom;
+                        document.getElementById('camera-btn').style.display = "block";
+                    }
+                });
+                if(!isNear) {
+                    document.getElementById('status-text').innerText = "Cherchez les défis...";
+                    document.getElementById('camera-btn').style.display = "none";
+                }
+            }
+
+            // --- PARTIE FETCH CORRIGÉE ---
+            document.getElementById('camera-input').onchange = function(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                document.getElementById('camera-btn').style.display = "none";
+                document.getElementById('status-text').style.display = "none";
+                document.getElementById('loader').style.display = "block";
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const bytes = e.target.result.split(',')[1];
+                    
+                    fetch(SCRIPT_URL, {
+                        method: "POST",
+                        mode: "no-cors", // Crucial pour éviter l'erreur Failed to Fetch
+                        headers: { "Content-Type": "text/plain" },
+                        body: bytes
+                    })
+                    .then(() => {
+                        // En mode no-cors, on simule le succès car l'envoi est parti
+                        activeDefi.completed = true;
+                        activeDefi.marker.setIcon(new L.Icon({
+                            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
+                            iconSize: [25, 41], iconAnchor: [12, 41]
+                        }));
+                        document.getElementById('loader').style.display = "none";
+                        document.getElementById('success-msg').style.display = "block";
+                        document.getElementById('status-text').style.display = "block";
+                        document.getElementById('status-text').innerText = "Vérifiez votre Drive !";
+                        
+                        setTimeout(() => {
+                            document.getElementById('success-msg').style.display = "none";
+                        }, 3000);
+                    })
+                    .catch(err => {
+                        alert("Erreur réseau: " + err);
+                        document.getElementById('loader').style.display = "none";
+                        document.getElementById('camera-btn').style.display = "block";
+                    });
+                };
+                reader.readAsDataURL(file);
+            };
+        };
+    </script>
+</body>
+</html>
